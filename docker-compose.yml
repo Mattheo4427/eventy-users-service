@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: eventy_users_db
+      POSTGRES_USER: eventy
+      POSTGRES_PASSWORD: eventy
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  users-service:
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/eventy_users_db
+      SPRING_DATASOURCE_USERNAME: eventy
+      SPRING_DATASOURCE_PASSWORD: eventy
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+volumes:
+  pgdata:
+
