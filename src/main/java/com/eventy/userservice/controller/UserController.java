@@ -182,20 +182,23 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest req) {
-            try {
-                User u = new User();
-                u.setUsername(req.username);
-                u.setEmail(req.email);
-                u.setFirstName(req.firstName);
-                u.setLastName(req.lastName);
-                u.setBirthDate(req.birthDate);
-                u.setIsActive(true);
-                User saved = userService.createUser(u);
-                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
-            } catch (Exception e) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                        .body(null);
-            }
+        try {
+            User u = new User();
+            u.setUsername(req.username);
+            u.setEmail(req.email);
+            u.setFirstName(req.firstName);
+            u.setLastName(req.lastName);
+            u.setAvatarUrl(req.avatarUrl); // add avatarUrl
+            u.setBirthDate(req.birthDate);
+            u.setStatus(User.Status.ACTIVE); // default status
+            u.setBalance(req.balance != null ? req.balance : java.math.BigDecimal.ZERO); // default balance
+            u.setRole(User.Role.USER); // default role
+            User saved = userService.createUser(u);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(null);
+        }
     }
 
     @PutMapping("/{id}")
@@ -227,7 +230,7 @@ public class UserController {
             }
     }
 
-    // DTOs
+// DTOs
     public static class CreateUserRequest {
         @NotBlank
         public String username;
@@ -242,8 +245,16 @@ public class UserController {
         @NotBlank
         public String lastName;
 
+        public String avatarUrl; // add avatarUrl
+
         @NotNull
         public LocalDate birthDate;
+
+        public User.Status status; // optional, default ACTIVE
+
+        public java.math.BigDecimal balance; // optional, default 0
+
+        public User.Role role; // optional, default USER
     }
 
     public static class UpdateUserRequest {
@@ -260,11 +271,15 @@ public class UserController {
         @NotBlank
         public String lastName;
 
+        public String avatarUrl; // add avatarUrl
+
         @NotNull
         public LocalDate birthDate;
 
-        @NotNull
-        public Boolean isActive;
+        public User.Status status;
+
+        public java.math.BigDecimal balance;
+
+        public User.Role role;
     }
 }
-

@@ -36,21 +36,24 @@ public class UserService {
             user.setEmail(userDetails.getEmail());
             user.setFirstName(userDetails.getFirstName());
             user.setLastName(userDetails.getLastName());
+            user.setAvatarUrl(userDetails.getAvatarUrl());
             user.setBirthDate(userDetails.getBirthDate());
-            user.setIsActive(userDetails.isIsActive());
-            return user;
+            user.setStatus(userDetails.getStatus());
+            user.setBalance(userDetails.getBalance());
+            user.setRole(userDetails.getRole());
+            return userRepository.save(user);
         });
+    }
+
+    public boolean suspendUser(UUID id) {
+        return userRepository.findById(id).map(user -> {
+            user.setStatus(User.Status.SUSPENDED);
+            userRepository.save(user);
+            return true;
+        }).orElse(false);
     }
 
     public void deleteUser(UUID id) {
         userRepository.deleteById(id);
     }
-    
-        public boolean suspendUser(UUID id) {
-            return userRepository.findById(id).map(user -> {
-                user.setIsActive(false); // ou status = SUSPENDED si enum
-                userRepository.save(user);
-                return true;
-            }).orElse(false);
-        }
 }
