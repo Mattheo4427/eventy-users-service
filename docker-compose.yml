@@ -1,26 +1,34 @@
-version: '3.8'
 services:
+  # 1. PostgreSQL Database Service
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
+    container_name: postgres_db
     environment:
-      POSTGRES_DB: eventy_users_db
-      POSTGRES_USER: eventy
-      POSTGRES_PASSWORD: eventy
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  # 2. Users Microservice
   users-service:
-    build: .
-    depends_on:
-      - postgres
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/eventy_users_db
-      SPRING_DATASOURCE_USERNAME: eventy
-      SPRING_DATASOURCE_PASSWORD: eventy
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: users_microservice
     ports:
       - "8080:8080"
-    restart: unless-stopped
-volumes:
-  pgdata:
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_ISSUER_URI: ${JWT_ISSUER_URI}
+    depends_on:
+      - postgres
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
+volumes:
+  postgres_data:

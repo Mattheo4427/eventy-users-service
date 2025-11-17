@@ -18,3 +18,25 @@ Thumbs.db
 # Docker
 *.pid
 
+# Local environment files (ignore real .env files, keep .env.example in repo)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Docker Compose override (local customizations)
+docker-compose.override.yml
+
+# IDE/editor
+.vscode/
+
+# Maven wrapper and build helpers
+mvnw
+mvnw.cmd
+.mvn/
+
+# Java artifacts
+*.jar
+
+# Logs and runtime
+logs/

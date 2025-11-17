@@ -20,6 +20,118 @@ import java.util.UUID;
 @RequestMapping("/api/users")
 @Validated
 public class UserController {
+    private static final String ERROR_USER_NOT_FOUND = "User not found.";
+    private static final String ERROR_AUTH_REQUIRED = "Authentication required.";
+
+        // GET /api/users/me
+        @GetMapping("/me")
+        public ResponseEntity<?> getCurrentUser() {
+            try {
+                UUID userId = getAuthenticatedUserId();
+                Optional<User> user = userService.getUserById(userId);
+                if (user.isPresent()) {
+                    return ResponseEntity.ok(user.get());
+                } else {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+                }
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse(ERROR_AUTH_REQUIRED));
+            }
+        }
+
+        // PUT /api/users/me
+        @PutMapping("/me")
+        public ResponseEntity<?> updateCurrentUser(@Valid @RequestBody UpdateUserRequest req) {
+            try {
+                UUID userId = getAuthenticatedUserId();
+                User details = new User();
+                details.setUsername(req.username);
+                details.setEmail(req.email);
+                details.setFirstName(req.firstName);
+                details.setLastName(req.lastName);
+                details.setBirthDate(req.birthDate);
+                details.setIsActive(req.isActive);
+                Optional<User> updated = userService.updateUser(userId, details);
+                if (updated.isPresent()) {
+                    return ResponseEntity.ok(updated.get());
+                } else {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+                }
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse(ERROR_AUTH_REQUIRED));
+            }
+        }
+
+        // GET /api/users/me/balance
+        @GetMapping("/me/balance")
+        public ResponseEntity<?> getCurrentUserBalance() {
+            try {
+                UUID userId = getAuthenticatedUserId();
+                Optional<User> user = userService.getUserById(userId);
+                if (user.isPresent()) {
+                    return ResponseEntity.ok(new BalanceResponse(user.get().getBalance()));
+                } else {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+                }
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ErrorResponse(ERROR_AUTH_REQUIRED));
+            }
+        }
+
+        // ADMIN ENDPOINTS
+        // GET /api/admin/users
+        @GetMapping("/admin/users")
+        public ResponseEntity<?> adminListUsers(@RequestParam(required = false) String status) {
+            List<User> users = userService.getAllUsers();
+            if (users.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse("No users found."));
+            }
+            return ResponseEntity.ok(users);
+        }
+
+        // POST /api/admin/users/{id}/suspend
+        @PostMapping("/admin/users/{id}/suspend")
+        public ResponseEntity<?> suspendUser(@PathVariable UUID id) {
+            boolean suspended = userService.suspendUser(id);
+            if (suspended) {
+                return ResponseEntity.ok().body(new SuccessResponse("User suspended."));
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+            }
+        }
+
+        @DeleteMapping("/admin/users/{id}")
+        public ResponseEntity<?> adminDeleteUser(@PathVariable UUID id) {
+            try {
+                userService.deleteUser(id);
+                return ResponseEntity.ok().body(new SuccessResponse("User deleted."));
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+            }
+        }
+
+        // Error/Success response DTOs
+        public static class ErrorResponse {
+            public String error;
+            public ErrorResponse(String error) { this.error = error; }
+        }
+        public static class SuccessResponse {
+            public String message;
+            public SuccessResponse(String message) { this.message = message; }
+        }
+        public static class BalanceResponse {
+            public Object balance;
+            public BalanceResponse(Object balance) { this.balance = balance; }
+        }
     private final UserService userService;
 
     public UserController(UserService userService) {
@@ -28,48 +140,70 @@ public class UserController {
 
     @GetMapping
     public ResponseEntity<List<User>> listUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+           List<User> users = userService.getAllUsers();
+           if (users.isEmpty()) {
+              return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(null);
+           }
+           return ResponseEntity.ok(users);
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<User> getUser(@PathVariable UUID id) {
-        Optional<User> user = userService.getUserById(id);
-        return user.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+            Optional<User> user = userService.getUserById(id);
+            if (user.isPresent()) {
+                return ResponseEntity.ok(user.get());
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(null);
+            }
     }
 
     @PostMapping
     public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest req) {
-        User u = new User();
-        u.setUsername(req.username);
-        u.setEmail(req.email);
-        u.setFirstName(req.firstName);
-        u.setLastName(req.lastName);
-        u.setBirthDate(req.birthDate);
-        u.setIsActive(true);
-        User saved = userService.createUser(u);
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            try {
+                User u = new User();
+                u.setUsername(req.username);
+                u.setEmail(req.email);
+                u.setFirstName(req.firstName);
+                u.setLastName(req.lastName);
+                u.setBirthDate(req.birthDate);
+                u.setIsActive(true);
+                User saved = userService.createUser(u);
+                return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(null);
+            }
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<User> updateUser(@PathVariable UUID id, @Valid @RequestBody UpdateUserRequest req) {
-        User details = new User();
-        details.setUsername(req.username);
-        details.setEmail(req.email);
-        details.setFirstName(req.firstName);
-        details.setLastName(req.lastName);
-        details.setBirthDate(req.birthDate);
-        details.setIsActive(req.isActive);
+            User details = new User();
+            details.setUsername(req.username);
+            details.setEmail(req.email);
+            details.setFirstName(req.firstName);
+            details.setLastName(req.lastName);
+            details.setBirthDate(req.birthDate);
+            details.setIsActive(req.isActive);
 
-        Optional<User> updated = userService.updateUser(id, details);
-        return updated.map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+            Optional<User> updated = userService.updateUser(id, details);
+            if (updated.isPresent()) {
+                return ResponseEntity.ok(updated.get());
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(null);
+            }
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable UUID id) {
-        userService.deleteUser(id);
-        return ResponseEntity.noContent().build();
+            try {
+                userService.deleteUser(id);
+                return ResponseEntity.noContent().build();
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
     }
 
     // DTOs

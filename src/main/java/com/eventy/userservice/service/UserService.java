@@ -45,4 +45,12 @@ public class UserService {
     public void deleteUser(UUID id) {
         userRepository.deleteById(id);
     }
+    
+        public boolean suspendUser(UUID id) {
+            return userRepository.findById(id).map(user -> {
+                user.setIsActive(false); // ou status = SUSPENDED si enum
+                userRepository.save(user);
+                return true;
+            }).orElse(false);
+        }
 }
