@@ -32,7 +32,7 @@ public class User {
     private String avatarUrl;
 
     @Column(name = "date", nullable = false)
-    private LocalDate birthDate;
+    private LocalDate creationDate;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -72,8 +72,8 @@ public class User {
     public String getAvatarUrl() { return avatarUrl; }
     public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
 
-    public LocalDate getBirthDate() { return birthDate; }
-    public void setBirthDate(LocalDate birthDate) { this.birthDate = birthDate; }
+    public LocalDate getCreationDate() { return creationDate; }
+    public void setCreationDate(LocalDate creationDate) { this.creationDate = creationDate; }
 
     public Status getStatus() { return status; }
     public void setStatus(Status status) { this.status = status; }

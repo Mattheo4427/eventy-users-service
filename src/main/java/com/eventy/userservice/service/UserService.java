@@ -37,7 +37,7 @@ public class UserService {
             user.setFirstName(userDetails.getFirstName());
             user.setLastName(userDetails.getLastName());
             user.setAvatarUrl(userDetails.getAvatarUrl());
-            user.setBirthDate(userDetails.getBirthDate());
+            user.setCreationDate(userDetails.getCreationDate());
             user.setStatus(userDetails.getStatus());
             user.setBalance(userDetails.getBalance());
             user.setRole(userDetails.getRole());

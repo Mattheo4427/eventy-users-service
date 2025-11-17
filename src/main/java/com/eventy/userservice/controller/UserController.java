@@ -20,6 +20,17 @@ import java.util.UUID;
 @RequestMapping("/api/users")
 @Validated
 public class UserController {
+        private void checkAdminRole() {
+            org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !authentication.isAuthenticated()) {
+                throw new org.springframework.security.access.AccessDeniedException("Authentication required");
+            }
+            boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("admin"));
+            if (!isAdmin) {
+                throw new org.springframework.security.access.AccessDeniedException("Admin role required");
+            }
+        }
     private static final String ERROR_USER_NOT_FOUND = "User not found.";
     private static final String ERROR_AUTH_REQUIRED = "Authentication required.";
     // Extract user ID from JWT (Keycloak) via Spring Security
@@ -72,8 +83,8 @@ public class UserController {
                 details.setEmail(req.email);
                 details.setFirstName(req.firstName);
                 details.setLastName(req.lastName);
-                details.setBirthDate(req.birthDate);
-                details.setIsActive(req.isActive);
+                details.setCreationDate(req.creationDate);
+                details.setStatus(req.status);
                 Optional<User> updated = userService.updateUser(userId, details);
                 if (updated.isPresent()) {
                     return ResponseEntity.ok(updated.get());
@@ -109,6 +120,9 @@ public class UserController {
         // GET /api/admin/users
         @GetMapping("/admin/users")
         public ResponseEntity<?> adminListUsers(@RequestParam(required = false) String status) {
+                    try { checkAdminRole(); } catch (org.springframework.security.access.AccessDeniedException e) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Admin role required"));
+                    }
             List<User> users = userService.getAllUsers();
             if (users.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -120,6 +134,9 @@ public class UserController {
         // POST /api/admin/users/{id}/suspend
         @PostMapping("/admin/users/{id}/suspend")
         public ResponseEntity<?> suspendUser(@PathVariable UUID id) {
+                    try { checkAdminRole(); } catch (org.springframework.security.access.AccessDeniedException e) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Admin role required"));
+                    }
             boolean suspended = userService.suspendUser(id);
             if (suspended) {
                 return ResponseEntity.ok().body(new SuccessResponse("User suspended."));
@@ -131,6 +148,9 @@ public class UserController {
 
         @DeleteMapping("/admin/users/{id}")
         public ResponseEntity<?> adminDeleteUser(@PathVariable UUID id) {
+                    try { checkAdminRole(); } catch (org.springframework.security.access.AccessDeniedException e) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse("Admin role required"));
+                    }
             try {
                 userService.deleteUser(id);
                 return ResponseEntity.ok().body(new SuccessResponse("User deleted."));
@@ -188,11 +208,35 @@ public class UserController {
             u.setEmail(req.email);
             u.setFirstName(req.firstName);
             u.setLastName(req.lastName);
-            u.setAvatarUrl(req.avatarUrl); // add avatarUrl
-            u.setBirthDate(req.birthDate);
-            u.setStatus(User.Status.ACTIVE); // default status
-            u.setBalance(req.balance != null ? req.balance : java.math.BigDecimal.ZERO); // default balance
-            u.setRole(User.Role.USER); // default role
+            u.setAvatarUrl(req.avatarUrl);
+            u.setCreationDate(req.creationDate);
+            u.setStatus(User.Status.ACTIVE);
+            u.setBalance(req.balance != null ? req.balance : java.math.BigDecimal.ZERO);
+            u.setRole(User.Role.USER); // Always USER for public endpoint
+            User saved = userService.createUser(u);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(null);
+        }
+    }
+    // POST /api/admin/users/create-admin
+    @PostMapping("/admin/users/create-admin")
+    public ResponseEntity<User> createAdmin(@Valid @RequestBody CreateUserRequest req) {
+                try { checkAdminRole(); } catch (org.springframework.security.access.AccessDeniedException e) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(null);
+                }
+        try {
+            User u = new User();
+            u.setUsername(req.username);
+            u.setEmail(req.email);
+            u.setFirstName(req.firstName);
+            u.setLastName(req.lastName);
+            u.setAvatarUrl(req.avatarUrl);
+            u.setCreationDate(req.creationDate);
+            u.setStatus(User.Status.ACTIVE);
+            u.setBalance(req.balance != null ? req.balance : java.math.BigDecimal.ZERO);
+            u.setRole(User.Role.ADMIN); // Only admin via this endpoint
             User saved = userService.createUser(u);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (Exception e) {
@@ -208,8 +252,7 @@ public class UserController {
             details.setEmail(req.email);
             details.setFirstName(req.firstName);
             details.setLastName(req.lastName);
-            details.setBirthDate(req.birthDate);
-            details.setIsActive(req.isActive);
+            details.setCreationDate(req.creationDate);
 
             Optional<User> updated = userService.updateUser(id, details);
             if (updated.isPresent()) {
@@ -248,7 +291,7 @@ public class UserController {
         public String avatarUrl; // add avatarUrl
 
         @NotNull
-        public LocalDate birthDate;
+        public LocalDate creationDate;
 
         public User.Status status; // optional, default ACTIVE
 
@@ -274,7 +317,7 @@ public class UserController {
         public String avatarUrl; // add avatarUrl
 
         @NotNull
-        public LocalDate birthDate;
+        public LocalDate creationDate;
 
         public User.Status status;
 
