@@ -30,11 +30,6 @@ docker-compose.override.yml
 # IDE/editor
 .vscode/
 
-# Maven wrapper and build helpers
-mvnw
-mvnw.cmd
-.mvn/
-
 # Java artifacts
 *.jar
 
