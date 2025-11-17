@@ -22,6 +22,27 @@ import java.util.UUID;
 public class UserController {
     private static final String ERROR_USER_NOT_FOUND = "User not found.";
     private static final String ERROR_AUTH_REQUIRED = "Authentication required.";
+    // Extract user ID from JWT (Keycloak) via Spring Security
+    private UUID getAuthenticatedUserId() {
+        // Get authentication from security context
+        org.springframework.security.core.Authentication authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new UnsupportedOperationException("No authenticated user found");
+        }
+        Object principal = authentication.getPrincipal();
+        // Keycloak adapter: principal is usually a KeycloakPrincipal or Jwt
+        if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
+            String sub = jwt.getSubject();
+            return UUID.fromString(sub);
+        } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
+            // Fallback: try username as UUID
+            return UUID.fromString(userDetails.getUsername());
+        } else if (principal instanceof String str) {
+            // Fallback: try principal string as UUID
+            return UUID.fromString(str);
+        }
+        throw new UnsupportedOperationException("Cannot extract user ID from principal: " + principal);
+    }
 
         // GET /api/users/me
         @GetMapping("/me")

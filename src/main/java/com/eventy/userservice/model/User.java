@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
@@ -38,6 +39,9 @@ public class User {
 
     @Column(nullable = false)
     private boolean isActive;
+
+    @Column(nullable = false)
+    private BigDecimal balance = BigDecimal.ZERO;
 
     @PrePersist
     protected void onCreate() {
@@ -77,4 +81,7 @@ public class User {
 
     public boolean isIsActive() { return isActive; }
     public void setIsActive(boolean isActive) { this.isActive = isActive; }
+
+    public BigDecimal getBalance() { return balance; }
+    public void setBalance(BigDecimal balance) { this.balance = balance; }
 }
