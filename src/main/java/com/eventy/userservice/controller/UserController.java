@@ -143,6 +143,13 @@ public class UserController {
             // Créer le nouvel utilisateur
             User u = new User();
             
+            u.setId(req.getId());
+
+            Optional<User> existingById = userService.getUserById(req.getId());
+            if (existingById.isPresent()) {
+                return ResponseEntity.ok(new SuccessResponse("User already exists, skipping sync"));
+            }
+
             // Réinitialiser les champs potentiellement null/vides avant de sauvegarder
             String username = req.getUsername() != null ? req.getUsername().trim() : "";
             String email = req.getEmail() != null ? req.getEmail().trim() : "";
@@ -382,6 +389,7 @@ public class UserController {
     public static class KeycloakSyncUserRequest {
         
         // Assouplissement de la validation pour éviter le 400 Bad Request
+        @NotNull private UUID id;
         @NotNull @Email private String email; 
         private String username;
         private String firstName;
@@ -398,6 +406,9 @@ public class UserController {
             this.lastName = lastName;
             this.role = role;
         }
+
+        public UUID getId() { return id; }
+        public void setId(UUID id) { this.id = id; }
 
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }

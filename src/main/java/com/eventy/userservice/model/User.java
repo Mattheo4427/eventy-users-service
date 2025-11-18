@@ -13,7 +13,6 @@ import java.math.BigDecimal;
 public class User {
     @Id
     @Column(name = "user_id")
-    @GeneratedValue(strategy = GenerationType.UUID) 
     private UUID id;
 
     @Column(nullable = false, unique = true)
