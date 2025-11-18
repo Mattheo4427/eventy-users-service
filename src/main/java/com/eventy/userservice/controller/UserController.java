@@ -14,6 +14,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 
 import java.time.LocalDate;
 import java.util.List;
@@ -25,6 +28,8 @@ import java.math.BigDecimal;
 @RequestMapping("/api/users")
 @Validated
 public class UserController {
+    private static final Logger log = LoggerFactory.getLogger(UserController.class);
+
     private static final String ERROR_USER_NOT_FOUND = "User not found.";
     private static final String ERROR_AUTH_REQUIRED = "Authentication required.";
 
@@ -92,6 +97,7 @@ public class UserController {
                     .body(new ErrorResponse(message));
                     
         } catch (Exception e) {
+            log.error("Error creating user: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Failed to create user due to invalid data or an internal error."));
         }
@@ -131,6 +137,8 @@ public class UserController {
             User u = new User();
             u.setUsername(req.username);
             u.setEmail(req.email);
+            // Keycloak peut envoyer des chaînes vides pour firstName et lastName,
+            // d'où la suppression de @NotBlank sur le DTO.
             u.setFirstName(req.firstName);
             u.setLastName(req.lastName);
             u.setAvatarUrl(null);
@@ -143,6 +151,8 @@ public class UserController {
                 try {
                     u.setRole(User.Role.valueOf(req.role.toUpperCase()));
                 } catch (IllegalArgumentException e) {
+                    // Log the invalid role received
+                    log.warn("Received invalid role '{}' from Keycloak for user {}. Defaulting to USER role.", req.role, req.username);
                     u.setRole(User.Role.USER); // Fallback si rôle invalide
                 }
             } else {
@@ -157,6 +167,8 @@ public class UserController {
                     .body(new ErrorResponse("User already exists"));
                     
         } catch (Exception e) {
+            // Added logging for internal debugging in case of unexpected errors
+            log.error("Failed to process Keycloak sync request for user {}: {}", req.username, e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Failed to sync user: " + e.getMessage()));
         }
@@ -271,6 +283,7 @@ public class UserController {
             User saved = userService.createUser(u);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (Exception e) {
+            log.error("Error creating admin user: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Failed to create admin user"));
         }
@@ -341,10 +354,10 @@ public class UserController {
         @Email
         public String email;
 
-        @NotBlank
+        // Validation relaxed for Keycloak sync: firstName can be empty string ("") if Keycloak sends it that way.
         public String firstName;
 
-        @NotBlank
+        // Validation relaxed for Keycloak sync: lastName can be empty string ("") if Keycloak sends it that way.
         public String lastName;
 
         public String role; // Optionnel, géré uniquement par Keycloak
