@@ -71,25 +71,35 @@ public class UserController {
 
     // POST /api/users - PUBLIC: To create a new standard user
     @PostMapping
-    public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest req) {
+    public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest req) {
         try {
             User u = new User();
             u.setUsername(req.username);
             u.setEmail(req.email);
             u.setFirstName(req.firstName);
             u.setLastName(req.lastName);
-            // Default values for new user
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
-            u.setBalance(BigDecimal.ZERO);
+            u.setBalance(java.math.BigDecimal.ZERO);
             u.setStatus(User.Status.ACTIVE);
-            u.setRole(User.Role.USER); // Explicitly set to USER
-
+            u.setRole(User.Role.USER);
+            
             User saved = userService.createUser(u);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Log the full exception for backend debugging
+            // log.error("User creation failed due to data integrity violation", e); 
+            
+            // Return a specific 409 Conflict status with a helpful error message
+            String message = "User creation failed: Username or Email already exists.";
+            return ResponseEntity.status(HttpStatus.CONFLICT) // Use 409 Conflict for resource existence issues
+                    .body(new ErrorResponse(message));
+                    
         } catch (Exception e) {
-            // Handle exceptions like unique constraint violation, etc.
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+            // Catch all other unexpected exceptions (e.g., service logic errors)
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Failed to create user due to invalid data or an internal error."));
         }
     }
     
