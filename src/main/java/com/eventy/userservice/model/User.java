@@ -7,13 +7,13 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "users", uniqueConstraints = {
-        @UniqueConstraint(columnNames = "username"),
-        @UniqueConstraint(columnNames = "email")
+    @UniqueConstraint(columnNames = "username"),
+    @UniqueConstraint(columnNames = "email")
 })
 public class User {
     @Id
     @Column(name = "user_id")
-    @GeneratedValue
+    @GeneratedValue(strategy = GenerationType.UUID) 
     private UUID id;
 
     @Column(nullable = false, unique = true)

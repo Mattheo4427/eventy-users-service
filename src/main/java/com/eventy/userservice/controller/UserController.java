@@ -88,9 +88,6 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Log the full exception for backend debugging
-            // log.error("User creation failed due to data integrity violation", e); 
-            
             // Return a specific 409 Conflict status with a helpful error message
             String message = "User creation failed: Username or Email already exists.";
             return ResponseEntity.status(HttpStatus.CONFLICT) // Use 409 Conflict for resource existence issues
