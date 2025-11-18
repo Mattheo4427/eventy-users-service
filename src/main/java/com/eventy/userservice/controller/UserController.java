@@ -2,7 +2,6 @@ package com.eventy.userservice.controller;
 
 import com.eventy.userservice.model.User;
 import com.eventy.userservice.service.UserService;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -16,7 +15,6 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 import java.time.LocalDate;
 import java.util.List;
@@ -62,12 +60,16 @@ public class UserController {
 
         if (principal instanceof Jwt jwt) {
             String sub = jwt.getSubject();
+            log.debug("Extracted user ID from JWT subject: {}", sub);
             return UUID.fromString(sub);
         } else if (principal instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
+            log.debug("Extracted user ID from UserDetails username: {}", userDetails.getUsername());
             return UUID.fromString(userDetails.getUsername());
         } else if (principal instanceof String str) {
+            log.debug("Extracted user ID from String principal: {}", str);
             return UUID.fromString(str);
         }
+        log.error("Cannot extract user ID from principal of type: {}", principal.getClass().getName());
         throw new UnsupportedOperationException("Cannot extract user ID from principal: " + principal);
     }
 
@@ -78,10 +80,10 @@ public class UserController {
     public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest req) {
         try {
             User u = new User();
-            u.setUsername(req.username);
-            u.setEmail(req.email);
-            u.setFirstName(req.firstName);
-            u.setLastName(req.lastName);
+            u.setUsername(req.getUsername());
+            u.setEmail(req.getEmail());
+            u.setFirstName(req.getFirstName());
+            u.setLastName(req.getLastName());
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
             u.setBalance(BigDecimal.ZERO);
@@ -93,6 +95,7 @@ public class UserController {
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             String message = "User creation failed: Username or Email already exists.";
+            log.warn("Data Integrity Violation on user creation: {}", message);
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new ErrorResponse(message));
                     
@@ -114,18 +117,22 @@ public class UserController {
         // Vérifier le secret partagé
         String expectedSecret = System.getenv("KEYCLOAK_SYNC_SECRET");
         if (expectedSecret == null || expectedSecret.isEmpty()) {
+            log.error("KEYCLOAK_SYNC_SECRET environment variable is not configured.");
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new ErrorResponse("Keycloak sync secret not configured"));
         }
         
         if (secret == null || !secret.equals(expectedSecret)) {
+            log.warn("Invalid or missing X-Keycloak-Secret received.");
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ErrorResponse("Invalid or missing Keycloak sync secret"));
         }
         
         try {
+            log.info("Processing Keycloak sync for username: {}", req.getUsername());
+            
             // Vérifier si l'utilisateur existe déjà
-            Optional<User> existingUser = userService.getUserByUsername(req.username);
+            Optional<User> existingUser = userService.getUserByUsername(req.getUsername());
             
             if (existingUser.isPresent()) {
                 // L'utilisateur existe déjà, on peut choisir de l'ignorer ou de le mettre à jour
@@ -135,24 +142,21 @@ public class UserController {
             
             // Créer le nouvel utilisateur
             User u = new User();
-            u.setUsername(req.username);
-            u.setEmail(req.email);
-            // Keycloak peut envoyer des chaînes vides pour firstName et lastName,
-            // d'où la suppression de @NotBlank sur le DTO.
-            u.setFirstName(req.firstName);
-            u.setLastName(req.lastName);
+            u.setUsername(req.getUsername());
+            u.setEmail(req.getEmail());
+            u.setFirstName(req.getFirstName());
+            u.setLastName(req.getLastName());
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
             u.setBalance(BigDecimal.ZERO);
             u.setStatus(User.Status.ACTIVE);
             
             // ✅ Accepter le rôle depuis Keycloak
-            if (req.role != null && !req.role.trim().isEmpty()) {
+            if (req.getRole() != null && !req.getRole().trim().isEmpty()) {
                 try {
-                    u.setRole(User.Role.valueOf(req.role.toUpperCase()));
+                    u.setRole(User.Role.valueOf(req.getRole().toUpperCase()));
                 } catch (IllegalArgumentException e) {
-                    // Log the invalid role received
-                    log.warn("Received invalid role '{}' from Keycloak for user {}. Defaulting to USER role.", req.role, req.username);
+                    log.warn("Received invalid role '{}' from Keycloak for user {}. Defaulting to USER role.", req.getRole(), req.getUsername());
                     u.setRole(User.Role.USER); // Fallback si rôle invalide
                 }
             } else {
@@ -160,15 +164,17 @@ public class UserController {
             }
             
             User saved = userService.createUser(u);
+            log.info("User {} created successfully from Keycloak sync.", saved.getUsername());
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("Data Integrity Violation on Keycloak sync for user {}: {}", req.getUsername(), e.getMessage());
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new ErrorResponse("User already exists"));
                     
         } catch (Exception e) {
             // Added logging for internal debugging in case of unexpected errors
-            log.error("Failed to process Keycloak sync request for user {}: {}", req.username, e.getMessage(), e);
+            log.error("Failed to process Keycloak sync request for user {}: {}", req.getUsername(), e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Failed to sync user: " + e.getMessage()));
         }
@@ -201,11 +207,11 @@ public class UserController {
             UUID userId = getAuthenticatedUserId();
             
             User details = new User();
-            details.setUsername(req.username);
-            details.setEmail(req.email);
-            details.setFirstName(req.firstName);
-            details.setLastName(req.lastName);
-            details.setAvatarUrl(req.avatarUrl);
+            details.setUsername(req.getUsername());
+            details.setEmail(req.getEmail());
+            details.setFirstName(req.getFirstName());
+            details.setLastName(req.getLastName());
+            details.setAvatarUrl(req.getAvatarUrl());
             
             Optional<User> updated = userService.updateUser(userId, details);
             if (updated.isPresent()) {
@@ -270,10 +276,10 @@ public class UserController {
         
         try {
             User u = new User();
-            u.setUsername(req.username);
-            u.setEmail(req.email);
-            u.setFirstName(req.firstName);
-            u.setLastName(req.lastName);
+            u.setUsername(req.getUsername());
+            u.setEmail(req.getEmail());
+            u.setFirstName(req.getFirstName());
+            u.setLastName(req.getLastName());
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
             u.setBalance(BigDecimal.ZERO);
@@ -331,53 +337,75 @@ public class UserController {
 
     // DTO pour création publique d'utilisateur (sans role)
     public static class CreateUserRequest {
-        @NotBlank
-        public String username;
+        @NotBlank private String username;
+        @NotBlank @Email private String email;
+        @NotBlank private String firstName;
+        @NotBlank private String lastName;
 
-        @NotBlank
-        @Email
-        public String email;
+        public CreateUserRequest() {} // Default constructor for Jackson
 
-        @NotBlank
-        public String firstName;
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
 
-        @NotBlank
-        public String lastName;
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
     }
 
     // DTO pour synchronisation Keycloak (avec role)
     public static class KeycloakSyncUserRequest {
-        @NotBlank
-        public String username;
+        @NotBlank private String username;
+        @NotBlank @Email private String email;
+        private String firstName; // No @NotBlank - can be empty string ("") from Keycloak
+        private String lastName;  // No @NotBlank - can be empty string ("") from Keycloak
+        private String role; 
 
-        @NotBlank
-        @Email
-        public String email;
+        public KeycloakSyncUserRequest() {} // Default constructor for Jackson
 
-        // Validation relaxed for Keycloak sync: firstName can be empty string ("") if Keycloak sends it that way.
-        public String firstName;
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
 
-        // Validation relaxed for Keycloak sync: lastName can be empty string ("") if Keycloak sends it that way.
-        public String lastName;
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
 
-        public String role; // Optionnel, géré uniquement par Keycloak
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
+
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
     }
 
     public static class UpdateUserRequest {
-        @NotBlank
-        public String username;
+        @NotBlank private String username;
+        @NotBlank @Email private String email;
+        @NotBlank private String firstName;
+        @NotBlank private String lastName;
+        private String avatarUrl;
 
-        @NotBlank
-        @Email
-        public String email;
+        public UpdateUserRequest() {} // Default constructor for Jackson
 
-        @NotBlank
-        public String firstName;
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
 
-        @NotBlank
-        public String lastName;
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
 
-        public String avatarUrl;
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
+
+        public String getAvatarUrl() { return avatarUrl; }
+        public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
     }
 
     // Response DTOs
