@@ -2,10 +2,10 @@ package com.eventy.userservice.controller;
 
 import com.eventy.userservice.model.User;
 import com.eventy.userservice.service.UserService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -51,7 +51,6 @@ public class UserController {
     private UUID getAuthenticatedUserId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()) {
-            // Throw specific exception to be caught as UNAUTHORIZED
             throw new UnsupportedOperationException("No authenticated user found");
         }
         Object principal = authentication.getPrincipal();
@@ -80,7 +79,7 @@ public class UserController {
             u.setLastName(req.lastName);
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
-            u.setBalance(java.math.BigDecimal.ZERO);
+            u.setBalance(BigDecimal.ZERO);
             u.setStatus(User.Status.ACTIVE);
             u.setRole(User.Role.USER);
             
@@ -88,15 +87,78 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // Return a specific 409 Conflict status with a helpful error message
             String message = "User creation failed: Username or Email already exists.";
-            return ResponseEntity.status(HttpStatus.CONFLICT) // Use 409 Conflict for resource existence issues
+            return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(new ErrorResponse(message));
                     
         } catch (Exception e) {
-            // Catch all other unexpected exceptions (e.g., service logic errors)
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Failed to create user due to invalid data or an internal error."));
+        }
+    }
+
+    // --- INTERNAL ENDPOINT: Keycloak Synchronization ---
+    
+    // POST /api/users/internal/keycloak-sync - INTERNAL: Sync user from Keycloak with role
+    @PostMapping("/internal/keycloak-sync")
+    public ResponseEntity<?> syncUserFromKeycloak(
+            @Valid @RequestBody KeycloakSyncUserRequest req,
+            @RequestHeader(value = "X-Keycloak-Secret", required = false) String secret) {
+        
+        // Vérifier le secret partagé
+        String expectedSecret = System.getenv("KEYCLOAK_SYNC_SECRET");
+        if (expectedSecret == null || expectedSecret.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Keycloak sync secret not configured"));
+        }
+        
+        if (secret == null || !secret.equals(expectedSecret)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Invalid or missing Keycloak sync secret"));
+        }
+        
+        try {
+            // Vérifier si l'utilisateur existe déjà
+            Optional<User> existingUser = userService.getUserByUsername(req.username);
+            
+            if (existingUser.isPresent()) {
+                // L'utilisateur existe déjà, on peut choisir de l'ignorer ou de le mettre à jour
+                return ResponseEntity.status(HttpStatus.OK)
+                        .body(new SuccessResponse("User already exists, skipping sync"));
+            }
+            
+            // Créer le nouvel utilisateur
+            User u = new User();
+            u.setUsername(req.username);
+            u.setEmail(req.email);
+            u.setFirstName(req.firstName);
+            u.setLastName(req.lastName);
+            u.setAvatarUrl(null);
+            u.setCreationDate(LocalDate.now());
+            u.setBalance(BigDecimal.ZERO);
+            u.setStatus(User.Status.ACTIVE);
+            
+            // ✅ Accepter le rôle depuis Keycloak
+            if (req.role != null && !req.role.trim().isEmpty()) {
+                try {
+                    u.setRole(User.Role.valueOf(req.role.toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    u.setRole(User.Role.USER); // Fallback si rôle invalide
+                }
+            } else {
+                u.setRole(User.Role.USER);
+            }
+            
+            User saved = userService.createUser(u);
+            return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+            
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(new ErrorResponse("User already exists"));
+                    
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Failed to sync user: " + e.getMessage()));
         }
     }
     
@@ -126,19 +188,12 @@ public class UserController {
         try {
             UUID userId = getAuthenticatedUserId();
             
-            // Only fields a regular user is expected to update
             User details = new User();
             details.setUsername(req.username);
             details.setEmail(req.email);
             details.setFirstName(req.firstName);
             details.setLastName(req.lastName);
             details.setAvatarUrl(req.avatarUrl);
-            // Note: Status and Balance modifications are highly restricted for /me, 
-            // but for simple DTO reuse, we allow them to be passed; 
-            // the Service layer should ensure they are ignored or restricted.
-            // For now, removing them to enforce user self-update limits:
-            // details.setBalance(req.balance); 
-            // details.setStatus(req.status);
             
             Optional<User> updated = userService.updateUser(userId, details);
             if (updated.isPresent()) {
@@ -221,7 +276,6 @@ public class UserController {
         }
     }
 
-
     // POST /api/admin/users/{id}/suspend : (Admin) Suspend le compte d'un utilisateur.
     @PostMapping("/admin/users/{id}/suspend")
     public ResponseEntity<?> suspendUser(@PathVariable UUID id) {
@@ -262,6 +316,7 @@ public class UserController {
 
     // --- DTOs ---
 
+    // DTO pour création publique d'utilisateur (sans role)
     public static class CreateUserRequest {
         @NotBlank
         public String username;
@@ -277,8 +332,24 @@ public class UserController {
         public String lastName;
     }
 
-    // Updated DTO to only include fields expected for regular user update,
-    // as per strict interpretation of /me PUT endpoint
+    // DTO pour synchronisation Keycloak (avec role)
+    public static class KeycloakSyncUserRequest {
+        @NotBlank
+        public String username;
+
+        @NotBlank
+        @Email
+        public String email;
+
+        @NotBlank
+        public String firstName;
+
+        @NotBlank
+        public String lastName;
+
+        public String role; // Optionnel, géré uniquement par Keycloak
+    }
+
     public static class UpdateUserRequest {
         @NotBlank
         public String username;
@@ -294,8 +365,6 @@ public class UserController {
         public String lastName;
 
         public String avatarUrl;
-        
-        // Removed status and balance, as these are typically administrative fields
     }
 
     // Response DTOs
