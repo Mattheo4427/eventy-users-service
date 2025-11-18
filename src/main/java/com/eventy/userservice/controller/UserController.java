@@ -86,6 +86,12 @@ public class UserController {
     @PostMapping
     public ResponseEntity<User> createUser(@Valid @RequestBody CreateUserRequest req) {
         try {
+            System.out.println("=== CREATE USER REQUEST ===");
+            System.out.println("Username: " + req.username);
+            System.out.println("Email: " + req.email);
+            System.out.println("FirstName: " + req.firstName);
+            System.out.println("LastName: " + req.lastName);
+            
             User u = new User();
             u.setUsername(req.username);
             u.setEmail(req.email);
@@ -98,10 +104,16 @@ public class UserController {
             u.setStatus(User.Status.ACTIVE);
             u.setRole(User.Role.USER);
             
+            System.out.println("Creating user in database...");
             User saved = userService.createUser(u);
+            System.out.println("User created successfully with ID: " + saved.getId());
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(null);
+            System.err.println("=== ERROR CREATING USER ===");
+            System.err.println("Error message: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(null);
         }
     }
 
