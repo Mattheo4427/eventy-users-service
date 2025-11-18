@@ -5,6 +5,7 @@ import com.eventy.userservice.service.UserService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -135,23 +136,36 @@ public class UserController {
             Optional<User> existingUser = userService.getUserByUsername(req.getUsername());
             
             if (existingUser.isPresent()) {
-                // L'utilisateur existe déjà, on peut choisir de l'ignorer ou de le mettre à jour
                 return ResponseEntity.status(HttpStatus.OK)
                         .body(new SuccessResponse("User already exists, skipping sync"));
             }
             
             // Créer le nouvel utilisateur
             User u = new User();
-            u.setUsername(req.getUsername());
-            u.setEmail(req.getEmail());
-            u.setFirstName(req.getFirstName());
-            u.setLastName(req.getLastName());
+            
+            // Réinitialiser les champs potentiellement null/vides avant de sauvegarder
+            String username = req.getUsername() != null ? req.getUsername().trim() : "";
+            String email = req.getEmail() != null ? req.getEmail().trim() : "";
+            String firstName = req.getFirstName() != null ? req.getFirstName().trim() : "N/A";
+            String lastName = req.getLastName() != null ? req.getLastName().trim() : "N/A";
+
+            // Vérifications de base avant l'insertion
+            if (username.isEmpty() || email.isEmpty()) {
+                log.error("Username or email is empty after trimming for Keycloak sync.");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Username and email must be provided for Keycloak sync."));
+            }
+
+            u.setUsername(username);
+            u.setEmail(email);
+            u.setFirstName(firstName);
+            u.setLastName(lastName);
             u.setAvatarUrl(null);
             u.setCreationDate(LocalDate.now());
             u.setBalance(BigDecimal.ZERO);
             u.setStatus(User.Status.ACTIVE);
             
-            // ✅ Accepter le rôle depuis Keycloak
+            // Accepter le rôle depuis Keycloak
             if (req.getRole() != null && !req.getRole().trim().isEmpty()) {
                 try {
                     u.setRole(User.Role.valueOf(req.getRole().toUpperCase()));
@@ -173,10 +187,9 @@ public class UserController {
                     .body(new ErrorResponse("User already exists"));
                     
         } catch (Exception e) {
-            // Added logging for internal debugging in case of unexpected errors
             log.error("Failed to process Keycloak sync request for user {}: {}", req.getUsername(), e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(new ErrorResponse("Failed to sync user: " + e.getMessage()));
+                    .body(new ErrorResponse("Failed to sync user due to internal error: " + e.getMessage()));
         }
     }
     
@@ -344,6 +357,14 @@ public class UserController {
 
         public CreateUserRequest() {} // Default constructor for Jackson
 
+        // Constructor for testing and easy instantiation
+        public CreateUserRequest(String username, String email, String firstName, String lastName) {
+            this.username = username;
+            this.email = email;
+            this.firstName = firstName;
+            this.lastName = lastName;
+        }
+
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
 
@@ -357,15 +378,26 @@ public class UserController {
         public void setLastName(String lastName) { this.lastName = lastName; }
     }
 
-    // DTO pour synchronisation Keycloak (avec role)
+    // DTO pour synchronisation Keycloak (avec role) - Validation assouplie
     public static class KeycloakSyncUserRequest {
-        @NotBlank private String username;
-        @NotBlank @Email private String email;
-        private String firstName; // No @NotBlank - can be empty string ("") from Keycloak
-        private String lastName;  // No @NotBlank - can be empty string ("") from Keycloak
+        
+        // Assouplissement de la validation pour éviter le 400 Bad Request
+        @NotNull @Email private String email; 
+        private String username;
+        private String firstName;
+        private String lastName;
         private String role; 
 
         public KeycloakSyncUserRequest() {} // Default constructor for Jackson
+
+        // Constructor for testing and easy instantiation
+        public KeycloakSyncUserRequest(String username, String email, String firstName, String lastName, String role) {
+            this.username = username;
+            this.email = email;
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.role = role;
+        }
 
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
@@ -391,6 +423,15 @@ public class UserController {
         private String avatarUrl;
 
         public UpdateUserRequest() {} // Default constructor for Jackson
+
+        // Constructor for testing and easy instantiation
+        public UpdateUserRequest(String username, String email, String firstName, String lastName, String avatarUrl) {
+            this.username = username;
+            this.email = email;
+            this.firstName = firstName;
+            this.lastName = lastName;
+            this.avatarUrl = avatarUrl;
+        }
 
         public String getUsername() { return username; }
         public void setUsername(String username) { this.username = username; }
