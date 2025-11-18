@@ -81,6 +81,7 @@ public class UserController {
     public ResponseEntity<?> createUser(@Valid @RequestBody CreateUserRequest req) {
         try {
             User u = new User();
+            u.setId(UUID.randomUUID());
             u.setUsername(req.getUsername());
             u.setEmail(req.getEmail());
             u.setFirstName(req.getFirstName());
@@ -296,6 +297,7 @@ public class UserController {
         
         try {
             User u = new User();
+            u.setId(UUID.randomUUID());
             u.setUsername(req.getUsername());
             u.setEmail(req.getEmail());
             u.setFirstName(req.getFirstName());
