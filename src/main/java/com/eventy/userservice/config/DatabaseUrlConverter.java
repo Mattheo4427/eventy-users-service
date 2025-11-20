@@ -4,7 +4,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Bean;
 import javax.sql.DataSource;
+import org.springframework.context.annotation.Primary; // Important
 import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 
 @Configuration
 public class DatabaseUrlConverter {
@@ -13,7 +15,8 @@ public class DatabaseUrlConverter {
     private String databaseUrl;
 
     @Bean
-    public DataSource dataSource() {
+    @Primary
+    public DataSource dataSource(DataSourceProperties properties) {
         if (databaseUrl.startsWith("postgres://")) {
             // Extraction des infos
             String jdbcUrl = convertToJdbc(databaseUrl);
@@ -24,9 +27,7 @@ public class DatabaseUrlConverter {
             return ds;
         }
         // Cas normal
-        HikariDataSource ds = new HikariDataSource();
-        ds.setJdbcUrl(databaseUrl);
-        return ds;
+        return properties.initializeDataSourceBuilder().type(HikariDataSource.class).build();
     }
 
     private String convertToJdbc(String url) {
