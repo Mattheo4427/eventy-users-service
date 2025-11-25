@@ -58,14 +58,14 @@ class UserControllerTest {
     void testCreateUser_Success() throws Exception {
         UUID newId = UUID.randomUUID();
         // Utilisation du constructeur public pour créer le DTO, évitant l'accès aux champs privés.
-        CreateUserRequest req = new CreateUserRequest("newuser", "new@example.com", "New", "User");
+        CreateUserRequest req = new CreateUserRequest("newuser", "new@example.com", "New", "User", "pass");
 
         User savedUser = createBaseUser(newId);
         savedUser.setUsername(req.getUsername());
         savedUser.setEmail(req.getEmail());
 
         // Mock the service call to return the created user
-        when(userService.createUser(any(User.class))).thenReturn(savedUser);
+        when(userService.createUser(any(User.class), "pass")).thenReturn(savedUser);
 
         mockMvc.perform(post("/api/users")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -78,7 +78,7 @@ class UserControllerTest {
     @Test
     void testCreateUser_BadRequest_InvalidEmail() throws Exception {
         // Utilisation du constructeur public avec un email invalide
-        CreateUserRequest req = new CreateUserRequest("newuser", "invalid-email", "New", "User");
+        CreateUserRequest req = new CreateUserRequest("newuser", "invalid-email", "New", "User" , "pass");
 
         // We expect a Bad Request (400) due to @Email validation failure on the DTO
         mockMvc.perform(post("/api/users")

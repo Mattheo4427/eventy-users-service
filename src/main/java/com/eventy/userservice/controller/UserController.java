@@ -24,7 +24,7 @@ import java.util.UUID;
 import java.math.BigDecimal;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/users")
 @Validated
 public class UserController {
     private static final Logger log = LoggerFactory.getLogger(UserController.class);
@@ -45,7 +45,7 @@ public class UserController {
             throw new AccessDeniedException("Authentication required");
         }
         boolean isAdmin = authentication.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("admin"));
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("admin") || a.getAuthority().equals("ADMIN"));
         if (!isAdmin) {
             throw new AccessDeniedException("Admin role required");
         }
@@ -92,7 +92,7 @@ public class UserController {
             u.setStatus(User.Status.ACTIVE);
             u.setRole(User.Role.USER);
             
-            User saved = userService.createUser(u);
+            User saved = userService.createUser(u , req.password);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
@@ -185,7 +185,7 @@ public class UserController {
                 u.setRole(User.Role.USER);
             }
             
-            User saved = userService.createUser(u);
+            User saved = userService.syncUser(u);
             log.info("User {} created successfully from Keycloak sync.", saved.getUsername());
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
             
@@ -308,7 +308,7 @@ public class UserController {
             u.setStatus(User.Status.ACTIVE);
             u.setRole(User.Role.ADMIN); 
             
-            User saved = userService.createUser(u);
+            User saved = userService.createUser(u, req.password);
             return ResponseEntity.status(HttpStatus.CREATED).body(saved);
         } catch (Exception e) {
             log.error("Error creating admin user: {}", e.getMessage(), e);
@@ -355,6 +355,49 @@ public class UserController {
         }
     }
 
+    // PUT /users/admin/users/{id} : (Admin) Met à jour un utilisateur (y compris son rôle)
+    @PutMapping("/admin/users/{id}")
+    public ResponseEntity<?> adminUpdateUser(@PathVariable UUID id, @Valid @RequestBody AdminUpdateUserRequest req) {
+        try {
+            checkAdminRole();
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(e.getMessage()));
+        }
+
+        try {
+            // On prépare l'objet avec les nouvelles valeurs
+            User userDetails = new User();
+            userDetails.setUsername(req.getUsername());
+            userDetails.setEmail(req.getEmail());
+            userDetails.setFirstName(req.getFirstName());
+            userDetails.setLastName(req.getLastName());
+
+            // Gestion du rôle
+            if (req.getRole() != null) {
+                try {
+                    userDetails.setRole(User.Role.valueOf(req.getRole().toUpperCase()));
+                } catch (IllegalArgumentException e) {
+                    userDetails.setRole(User.Role.USER);
+                }
+            } else {
+                // Si pas de rôle envoyé, on garde l'existant (géré dans le service ou fallback USER)
+                userDetails.setRole(User.Role.USER);
+            }
+
+            Optional<User> updatedUser = userService.updateUser(id, userDetails);
+
+            if (updatedUser.isPresent()) {
+                return ResponseEntity.ok(updatedUser.get());
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+            }
+        } catch (Exception e) {
+            log.error("Erreur update admin", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Update failed: " + e.getMessage()));
+        }
+    }
+
     // --- DTOs ---
 
     // DTO pour création publique d'utilisateur (sans role)
@@ -363,11 +406,12 @@ public class UserController {
         @NotBlank @Email private String email;
         @NotBlank private String firstName;
         @NotBlank private String lastName;
+        @NotBlank private String password;
 
         public CreateUserRequest() {} // Default constructor for Jackson
 
         // Constructor for testing and easy instantiation
-        public CreateUserRequest(String username, String email, String firstName, String lastName) {
+        public CreateUserRequest(String username, String email, String firstName, String lastName,  String password) {
             this.username = username;
             this.email = email;
             this.firstName = firstName;
@@ -385,6 +429,9 @@ public class UserController {
 
         public String getLastName() { return lastName; }
         public void setLastName(String lastName) { this.lastName = lastName; }
+
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
     }
 
     // DTO pour synchronisation Keycloak (avec role) - Validation assouplie
@@ -438,7 +485,7 @@ public class UserController {
         public UpdateUserRequest() {} // Default constructor for Jackson
 
         // Constructor for testing and easy instantiation
-        public UpdateUserRequest(String username, String email, String firstName, String lastName, String avatarUrl) {
+        public UpdateUserRequest(String username, String email, String firstName, String lastName, String avatarUrl, String role) {
             this.username = username;
             this.email = email;
             this.firstName = firstName;
@@ -460,6 +507,29 @@ public class UserController {
 
         public String getAvatarUrl() { return avatarUrl; }
         public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
+    }
+
+    // DTO spécifique pour l'édition Admin (inclut le rôle)
+    public static class AdminUpdateUserRequest {
+        @NotBlank private String username;
+        @NotBlank @Email private String email;
+        @NotBlank private String firstName;
+        @NotBlank private String lastName;
+        private String role; // "USER" ou "ADMIN"
+
+        // Constructeurs, Getters, Setters
+        public AdminUpdateUserRequest() {}
+
+        public String getUsername() { return username; }
+        public void setUsername(String username) { this.username = username; }
+        public String getEmail() { return email; }
+        public void setEmail(String email) { this.email = email; }
+        public String getFirstName() { return firstName; }
+        public void setFirstName(String firstName) { this.firstName = firstName; }
+        public String getLastName() { return lastName; }
+        public void setLastName(String lastName) { this.lastName = lastName; }
+        public String getRole() { return role; }
+        public void setRole(String role) { this.role = role; }
     }
 
     // Response DTOs
