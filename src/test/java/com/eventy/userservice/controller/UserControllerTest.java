@@ -1,31 +1,44 @@
 package com.eventy.userservice.controller;
 
-import com.eventy.userservice.controller.UserController.CreateUserRequest;
 import com.eventy.userservice.model.User;
 import com.eventy.userservice.service.UserService;
+import com.eventy.userservice.controller.UserController.CreateUserRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.security.oauth2.resource.servlet.OAuth2ResourceServerAutoConfiguration;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.http.MediaType;
 
+import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.math.BigDecimal;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(UserController.class)
-@AutoConfigureMockMvc(addFilters = false) // Important: Désactive les filtres de sécurité pour isoler le contrôleur
+@WebMvcTest(
+        controllers = UserController.class,
+        excludeAutoConfiguration = {
+                SecurityAutoConfiguration.class,
+                OAuth2ResourceServerAutoConfiguration.class
+        }
+)
+@AutoConfigureMockMvc(addFilters = false)
 class UserControllerTest {
 
     @Autowired
@@ -37,22 +50,41 @@ class UserControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    // Helper method for creating a base User object
-    private User createBaseUser(UUID id) {
-        User user = new User();
-        user.setId(id);
-        user.setUsername("testuser");
-        user.setEmail("test@example.com");
-        user.setFirstName("Test");
-        user.setLastName("User");
-        user.setBalance(BigDecimal.ZERO);
-        user.setCreationDate(LocalDate.now());
-        user.setStatus(User.Status.ACTIVE);
-        user.setRole(User.Role.USER);
-        return user;
+    // Helper: create test user
+    private User baseUser(UUID id) {
+        User u = new User();
+        u.setId(id);
+        u.setUsername("testuser");
+        u.setEmail("test@example.com");
+        u.setFirstName("Test");
+        u.setLastName("User");
+        u.setCreationDate(LocalDate.now());
+        u.setBalance(BigDecimal.ZERO);
+        u.setStatus(User.Status.ACTIVE);
+        u.setRole(User.Role.USER);
+        return u;
     }
 
-    // --- Tests de l'Endpoint Public de Création (POST /api/users) ---
+    // Helper: simulate authenticated user
+    private void mockAuthenticated(UUID userId, boolean admin) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new TestingAuthenticationToken(
+                        userId.toString(),
+                        null,
+                        admin ? List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
+                              : List.of(new SimpleGrantedAuthority("ROLE_USER"))
+                )
+        );
+    }
+
+    // Helper: simulate no authentication
+    private void clearAuth() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /** ================================
+     *    PUBLIC CREATE USER
+     *  ================================= */
 
     @Test
     void testCreateUser_Success() throws Exception {
@@ -60,16 +92,17 @@ class UserControllerTest {
         // Utilisation du constructeur public pour créer le DTO, évitant l'accès aux champs privés.
         CreateUserRequest req = new CreateUserRequest("newuser", "new@example.com", "New", "User", "pass");
 
-        User savedUser = createBaseUser(newId);
-        savedUser.setUsername(req.getUsername());
-        savedUser.setEmail(req.getEmail());
+        UUID id = UUID.randomUUID();
+        User saved = baseUser(id);
+        saved.setUsername("newuser");
+        saved.setEmail("new@example.com");
 
         // Mock the service call to return the created user
         when(userService.createUser(any(User.class), "pass")).thenReturn(savedUser);
 
         mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(req)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.username").value("newuser"))
                 .andExpect(jsonPath("$.role").value("USER"));
@@ -80,23 +113,78 @@ class UserControllerTest {
         // Utilisation du constructeur public avec un email invalide
         CreateUserRequest req = new CreateUserRequest("newuser", "invalid-email", "New", "User" , "pass");
 
-        // We expect a Bad Request (400) due to @Email validation failure on the DTO
         mockMvc.perform(post("/api/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(req)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isBadRequest());
     }
 
-    // --- Tests de l'Endpoint /me (Nécessite normalement une simulation de JWT/Auth) ---
-    // Ces tests montrent que SANS simulation de sécurité (addFilters=false), l'appel échoue
-    // car getAuthenticatedUserId lève une exception. C'est le comportement attendu.
+    /** ================================
+     *          /me ENDPOINT
+     *  ================================= */
 
     @Test
-    void testGetCurrentUser_Unauthorized() throws Exception {
-        // Since addFilters = false, getAuthenticatedUserId() throws UnsupportedOperationException
-        // which the controller catches and returns 401 UNAUTHORIZED.
+    void me_unauthorized_whenNotAuthenticated() throws Exception {
+        clearAuth();
+
         mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").value("Authentication required."));
+    }
+
+    @Test
+    void me_success() throws Exception {
+        UUID id = UUID.randomUUID();
+        mockAuthenticated(id, false);
+
+        User user = baseUser(id);
+        when(userService.getUserById(id)).thenReturn(Optional.of(user));
+
+        mockMvc.perform(get("/api/users/me"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("testuser"));
+    }
+
+    /** ================================
+     *     ADMIN PROTECTED ENDPOINTS
+     *  ================================= */
+
+    @Test
+    void admin_list_forbidden_whenNotAdmin() throws Exception {
+        mockAuthenticated(UUID.randomUUID(), false);
+
+        mockMvc.perform(get("/api/users/admin/users"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void admin_list_success_whenAdmin() throws Exception {
+        mockAuthenticated(UUID.randomUUID(), true);
+
+        when(userService.getAllUsers()).thenReturn(List.of(baseUser(UUID.randomUUID())));
+
+        mockMvc.perform(get("/api/users/admin/users"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void admin_suspend_notFound() throws Exception {
+        mockAuthenticated(UUID.randomUUID(), true);
+
+        when(userService.suspendUser(any(UUID.class))).thenReturn(false);
+
+        mockMvc.perform(post("/api/users/admin/users/" + UUID.randomUUID() + "/suspend"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void admin_suspend_success() throws Exception {
+        mockAuthenticated(UUID.randomUUID(), true);
+
+        when(userService.suspendUser(any(UUID.class))).thenReturn(true);
+
+        mockMvc.perform(post("/api/users/admin/users/" + UUID.randomUUID() + "/suspend"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("User suspended."));
     }
 }
