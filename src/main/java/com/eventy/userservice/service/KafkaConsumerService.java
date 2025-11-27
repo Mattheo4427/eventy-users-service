@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -25,14 +26,22 @@ public class KafkaConsumerService {
     public void handlePaymentValidated(PaymentValidatedEvent event) {
         log.info("Processing payment for transaction: {}", event.getTransactionId());
 
-        // 1. Débiter l'acheteur (Si on gère un solde interne)
-        updateUserBalance(event.getBuyerId(), BigDecimal.valueOf(event.getAmount()).negate(), "Buyer");
-
         // 2. Créditer le vendeur
-        updateUserBalance(event.getVendorId(), BigDecimal.valueOf(event.getVendorAmount()), "Vendor");
+        if (event.getVendorId() != null) {
+            User user = userRepository.findById(event.getVendorId()).orElse(null);
+            assert user != null;
+            BigDecimal oldBalance = user.getBalance();
+            BigDecimal newBalance = oldBalance.add(BigDecimal.valueOf(event.getVendorAmount()));
+            updateUserBalance(event.getVendorId(), newBalance, "Vendor");
+        } else {
+            log.warn("Vendor ID is null for transaction {} (Possible fee-only transaction or error)", event.getTransactionId());
+        }
     }
 
-    private void updateUserBalance(java.util.UUID userId, BigDecimal amount, String userType) {
+    private void updateUserBalance(UUID userId, BigDecimal amount, String userType) {
+        // Double sécurité : ne jamais appeler findById avec null
+        if (userId == null) return;
+
         userRepository.findById(userId).ifPresentOrElse(user -> {
             BigDecimal newBalance = user.getBalance().add(amount);
             user.setBalance(newBalance);
@@ -40,7 +49,6 @@ public class KafkaConsumerService {
             log.info("Updated {} balance (ID: {}). New Balance: {}", userType, userId, newBalance);
         }, () -> {
             log.error("{} not found with ID: {}", userType, userId);
-            // Ici, on pourrait publier un événement d'erreur "TransferFailed"
         });
     }
 }
