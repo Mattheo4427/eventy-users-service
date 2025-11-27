@@ -43,6 +43,7 @@ public class UserService {
         // Note : Assurez-vous d'avoir corrigé l'erreur Enum -> String ici aussi (.name())
         String keycloakId = keycloakAdminService.createUser(
                 user.getEmail(),
+                user.getUsername(),
                 user.getFirstName(),
                 user.getLastName(),
                 password,
@@ -171,6 +172,19 @@ public class UserService {
             // Optionnel : Désactiver aussi dans Keycloak
             // keycloakAdminService.disableUser(id.toString()); 
             
+            return true;
+        }).orElse(false);
+    }
+
+    @Transactional
+    public boolean UnSuspendUser(UUID id) {
+        return userRepository.findById(id).map(user -> {
+            user.setStatus(User.Status.ACTIVE);
+            userRepository.save(user);
+
+            // Optionnel : Désactiver aussi dans Keycloak
+            // keycloakAdminService.disableUser(id.toString());
+
             return true;
         }).orElse(false);
     }

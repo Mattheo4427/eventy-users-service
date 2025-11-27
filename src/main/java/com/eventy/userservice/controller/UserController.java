@@ -336,6 +336,24 @@ public class UserController {
         }
     }
 
+    @PostMapping("/admin/users/{id}/unsuspend")
+    public ResponseEntity<?> unsuspendUser(@PathVariable UUID id) {
+        try {
+            checkAdminRole();
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse(e.getMessage()));
+        }
+
+        boolean suspended = userService.UnSuspendUser(id);
+        if (suspended) {
+            return ResponseEntity.ok().body(new SuccessResponse("User suspended."));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ErrorResponse(ERROR_USER_NOT_FOUND));
+        }
+    }
+
     // DELETE /api/admin/users/{id} : (Admin) Supprime un compte utilisateur.
     @DeleteMapping("/admin/users/{id}")
     public ResponseEntity<?> adminDeleteUser(@PathVariable UUID id) {

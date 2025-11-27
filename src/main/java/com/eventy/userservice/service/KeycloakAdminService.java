@@ -30,10 +30,10 @@ public class KeycloakAdminService {
     /**
      * Crée un utilisateur dans Keycloak et retourne son ID (UUID).
      */
-    public String createUser(String email, String firstName, String lastName, String password, String role) {
+    public String createUser(String email,String username, String firstName, String lastName, String password, String role) {
         UserRepresentation user = new UserRepresentation();
         user.setEnabled(true);
-        user.setUsername(email); // On utilise l'email comme username
+        user.setUsername(username); // On utilise l'email comme username
         user.setEmail(email);
         user.setFirstName(firstName);
         user.setLastName(lastName);
