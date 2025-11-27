@@ -58,14 +58,58 @@ public class UserService {
     }
 
     /**
-     * SCÉNARIO 2 : Synchronisation (Webhook Keycloak)
-     * L'utilisateur existe DÉJÀ dans Keycloak, on ne le crée que localement.
+     * CORRECTION : Synchronisation Keycloak (Webhook)
+     * Ne met à jour QUE les champs d'identité, PRÉSERVE la balance et le status.
      */
     @Transactional
-    public User syncUser(User user) {
-        log.info("Synchronisation locale de l'utilisateur : {}", user.getEmail());
-        // Ici, user.getUserId() doit déjà être défini par le contrôleur
-        return userRepository.save(user);
+    public User syncUser(User sourceUser) {
+        log.info("Synchronisation de l'utilisateur : {}", sourceUser.getEmail());
+
+        return userRepository.findById(sourceUser.getId())
+                .map(existingUser -> {
+                    // Mise à jour partielle : On ne touche PAS à la balance !
+                    existingUser.setEmail(sourceUser.getEmail());
+                    existingUser.setUsername(sourceUser.getUsername());
+                    existingUser.setFirstName(sourceUser.getFirstName());
+                    existingUser.setLastName(sourceUser.getLastName());
+
+                    // On met à jour le rôle uniquement s'il est fourni et valide (évite reset USER)
+                    if (sourceUser.getRole() != null) {
+                        existingUser.setRole(sourceUser.getRole());
+                    }
+
+                    return userRepository.save(existingUser);
+                })
+                .orElseGet(() -> {
+                    // Si l'utilisateur n'existe pas, création initiale avec valeurs par défaut
+                    return userRepository.save(sourceUser);
+                });
+    }
+
+    /**
+     * CORRECTION : Mise à jour du profil par l'utilisateur
+     * Ne touche PAS à la balance ni au rôle. Met à jour Keycloak.
+     */
+    @Transactional
+    public User updateUserProfile(UUID id, String firstName, String lastName, String email) {
+        return userRepository.findById(id).map(user -> {
+            // 1. Mise à jour Keycloak
+            try {
+                keycloakAdminService.updateUser(
+                        id.toString(), firstName, lastName, email, user.getRole().name()
+                );
+            } catch (Exception e) {
+                log.error("Erreur update Keycloak", e);
+            }
+
+            // 2. Mise à jour Locale (Champs d'identité uniquement)
+            user.setFirstName(firstName);
+            user.setLastName(lastName);
+            user.setEmail(email);
+            // Pas de touche à la balance !
+
+            return userRepository.save(user);
+        }).orElseThrow(() -> new RuntimeException("User not found"));
     }
 
     @Transactional
@@ -73,13 +117,25 @@ public class UserService {
         return userRepository.findById(id).map(existingUser -> {
             // 1. Mise à jour dans Keycloak (si nécessaire)
             try {
-                keycloakAdminService.updateUser(
-                    id.toString(),
-                    userDetails.getFirstName(),
-                    userDetails.getLastName(),
-                    userDetails.getEmail(),
-                    userDetails.getRole().name()
-                );
+                if(userDetails.getRole() == null) {
+                    String role = existingUser.getRole().name();
+                    keycloakAdminService.updateUser(
+                            id.toString(),
+                            userDetails.getFirstName(),
+                            userDetails.getLastName(),
+                            userDetails.getEmail(),
+                            role
+                    );
+                }
+                else {
+                    keycloakAdminService.updateUser(
+                            id.toString(),
+                            userDetails.getFirstName(),
+                            userDetails.getLastName(),
+                            userDetails.getEmail(),
+                            userDetails.getRole().name()
+                    );
+                }
             } catch (Exception e) {
                 log.error("Erreur lors de la mise à jour Keycloak pour l'user {}", id, e);
                 // On continue quand même pour la mise à jour locale, ou on throw une exception selon votre règle métier
@@ -93,12 +149,15 @@ public class UserService {
             existingUser.setAvatarUrl(userDetails.getAvatarUrl());
             // existingUser.setCreationDate(userDetails.getCreationDate()); // Généralement on ne change pas la date de création
             existingUser.setStatus(userDetails.getStatus());
-            existingUser.setBalance(userDetails.getBalance());
-            existingUser.setRole(userDetails.getRole());
-            
+            //existingUser.setBalance(userDetails.getBalance());
+            if(userDetails.getRole() != null) {
+                existingUser.setRole(userDetails.getRole());
+            }
+
             return userRepository.save(existingUser);
         });
     }
+
 
     /**
      * Suspend un utilisateur (Localement + Keycloak si implémenté)

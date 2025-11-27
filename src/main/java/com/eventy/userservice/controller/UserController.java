@@ -234,7 +234,7 @@ public class UserController {
             details.setLastName(req.getLastName());
             details.setAvatarUrl(req.getAvatarUrl());
             
-            Optional<User> updated = userService.updateUser(userId, details);
+            Optional<User> updated = Optional.ofNullable(userService.updateUserProfile(userId, details.getFirstName(), details.getLastName(), details.getEmail()));
             if (updated.isPresent()) {
                 return ResponseEntity.ok(updated.get());
             } else {
