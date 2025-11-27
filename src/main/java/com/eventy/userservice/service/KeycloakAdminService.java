@@ -104,4 +104,24 @@ public class KeycloakAdminService {
         
         userResource.update(user);
     }
+
+    /**
+     * Active ou désactive un utilisateur dans Keycloak.
+     * @param userId L'ID de l'utilisateur
+     * @param enabled true pour activer, false pour désactiver (suspendre)
+     */
+    public void setUserStatus(String userId, boolean enabled) {
+        try {
+            UserResource userResource = getUsersResource().get(userId);
+            UserRepresentation user = userResource.toRepresentation();
+
+            user.setEnabled(enabled);
+            userResource.update(user);
+
+            log.info("Statut Keycloak mis à jour pour user {} : enabled={}", userId, enabled);
+        } catch (Exception e) {
+            log.error("Erreur lors du changement de statut Keycloak pour user {}", userId, e);
+            throw new RuntimeException("Impossible de mettre à jour le statut Keycloak", e);
+        }
+    }
 }

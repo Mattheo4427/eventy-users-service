@@ -170,7 +170,7 @@ public class UserService {
             userRepository.save(user);
             
             // Optionnel : Désactiver aussi dans Keycloak
-            // keycloakAdminService.disableUser(id.toString()); 
+            keycloakAdminService.setUserStatus(String.valueOf(id),false);
             
             return true;
         }).orElse(false);
@@ -183,7 +183,7 @@ public class UserService {
             userRepository.save(user);
 
             // Optionnel : Désactiver aussi dans Keycloak
-            // keycloakAdminService.disableUser(id.toString());
+            keycloakAdminService.setUserStatus(String.valueOf(id),true);
 
             return true;
         }).orElse(false);
