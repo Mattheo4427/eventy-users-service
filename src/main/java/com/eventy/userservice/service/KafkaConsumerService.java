@@ -28,11 +28,7 @@ public class KafkaConsumerService {
 
         // 2. Créditer le vendeur
         if (event.getVendorId() != null) {
-            User user = userRepository.findById(event.getVendorId()).orElse(null);
-            assert user != null;
-            BigDecimal oldBalance = user.getBalance();
-            BigDecimal newBalance = oldBalance.add(BigDecimal.valueOf(event.getVendorAmount()));
-            updateUserBalance(event.getVendorId(), newBalance, "Vendor");
+            updateUserBalance(event.getVendorId(), BigDecimal.valueOf(event.getVendorAmount()), "Vendor");
         } else {
             log.warn("Vendor ID is null for transaction {} (Possible fee-only transaction or error)", event.getTransactionId());
         }
