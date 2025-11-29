@@ -159,6 +159,24 @@ public class UserService {
         });
     }
 
+    /**
+     * Met à jour le mot de passe d'un utilisateur dans Keycloak.
+     */
+    @Transactional
+    public void updateUserPassword(UUID userId, String newPassword) {
+        // Vérifier si l'utilisateur existe localement (optionnel mais recommandé)
+        if (!userRepository.existsById(userId)) {
+            throw new RuntimeException("User not found");
+        }
+
+        // Appel à Keycloak pour changer le mot de passe
+        try {
+            keycloakAdminService.resetPassword(userId.toString(), newPassword);
+        } catch (Exception e) {
+            log.error("Erreur lors de la mise à jour du mot de passe pour l'utilisateur {}", userId, e);
+            throw new RuntimeException("Impossible de mettre à jour le mot de passe dans Keycloak");
+        }
+    }
 
     /**
      * Suspend un utilisateur (Localement + Keycloak si implémenté)

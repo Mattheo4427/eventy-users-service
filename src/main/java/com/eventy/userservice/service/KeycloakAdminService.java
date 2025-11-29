@@ -73,7 +73,7 @@ public class KeycloakAdminService {
     /**
      * Définit le mot de passe (Credentials).
      */
-    private void resetPassword(String userId, String password) {
+    public void resetPassword(String userId, String password) {
         CredentialRepresentation passwordCred = new CredentialRepresentation();
         passwordCred.setTemporary(false);
         passwordCred.setType(CredentialRepresentation.PASSWORD);

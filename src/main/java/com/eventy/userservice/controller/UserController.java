@@ -373,6 +373,44 @@ public class UserController {
         }
     }
 
+    // PUT /api/users/me/password : L'utilisateur connecté change son propre mot de passe
+    @PutMapping("/me/password")
+    public ResponseEntity<?> updateMyPassword(@Valid @RequestBody UpdatePasswordRequest req) {
+        try {
+            UUID userId = getAuthenticatedUserId();
+            userService.updateUserPassword(userId, req.getPassword());
+            return ResponseEntity.ok(new SuccessResponse("Password updated successfully."));
+        } catch (UnsupportedOperationException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(ERROR_AUTH_REQUIRED));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ErrorResponse("Failed to update password: " + e.getMessage()));
+        }
+    }
+
+    // PUT /api/users/admin/users/{id}/password : L'admin change le mot de passe d'un utilisateur
+    @PutMapping("/admin/users/{id}/password")
+    public ResponseEntity<?> adminUpdateUserPassword(@PathVariable UUID id, @Valid @RequestBody UpdatePasswordRequest req) {
+        try {
+            checkAdminRole();
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(e.getMessage()));
+        }
+
+        try {
+            userService.updateUserPassword(id, req.getPassword());
+            return ResponseEntity.ok(new SuccessResponse("User password updated successfully."));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND) // Ou 500 selon l'erreur
+                    .body(new ErrorResponse("Failed to update password: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getUser(@PathVariable UUID id) {
+        return ResponseEntity.ok(userService.getUserById(id));
+    }
+
     // PUT /users/admin/users/{id} : (Admin) Met à jour un utilisateur (y compris son rôle)
     @PutMapping("/admin/users/{id}")
     public ResponseEntity<?> adminUpdateUser(@PathVariable UUID id, @Valid @RequestBody AdminUpdateUserRequest req) {
@@ -447,6 +485,16 @@ public class UserController {
 
         public String getLastName() { return lastName; }
         public void setLastName(String lastName) { this.lastName = lastName; }
+
+        public String getPassword() { return password; }
+        public void setPassword(String password) { this.password = password; }
+    }
+
+    public static class UpdatePasswordRequest {
+        @NotBlank
+        private String password;
+
+        public UpdatePasswordRequest() {}
 
         public String getPassword() { return password; }
         public void setPassword(String password) { this.password = password; }
